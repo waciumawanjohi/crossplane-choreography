@@ -1,0 +1,57 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: example
+  labels:
+    # An optional convention is to include a label of the XRD. This allows
+    # easy discovery of compatible Compositions.
+    crossplane.io/xrd: xworkloads.carto.run
+    # The following label can
+    # be used in 'compositionSelector' in an XR or Claim.
+    app.tanzu.vmware.com/workload-type: web
+spec:
+
+  # Each Composition must declare that it is compatible with a particular type
+  # of Composite Resource using its 'compositeTypeRef' field. The referenced
+  # version must be marked 'referenceable' in the XRD that defines the XR.
+  compositeTypeRef:
+    apiVersion: carto.run/v1alpha1
+    kind: XWorkload
+
+  # When an XR is created in response to a claim Crossplane needs to know where
+  # it should create the XR's connection secret. This is configured using the
+  # 'writeConnectionSecretsToNamespace' field.
+#  writeConnectionSecretsToNamespace: crossplane-system
+
+  # Each Composition must specify at least one composed resource template. In
+  # this case the Composition tells Crossplane that it should create, update, or
+  # delete a CloudSQLInstance whenever someone creates, updates, or deletes an
+  # XPostgresSQLInstance.
+  resources:
+
+    # It's good practice to provide a unique name for each entry. Note that
+    # this identifies the resources entry within the Composition - it's not
+    # the name the CloudSQLInstance. The 'name' field will be required in a
+    # future version of this API.
+    - name: some-configmap
+
+      # The 'base' template for the CloudSQLInstance Crossplane will create.
+      # You can use the base template to specify fields that never change, or
+      # default values for fields that may optionally be patched over. Bases must
+      # be a valid Crossplane resource - a Managed Resource, Composite Resource,
+      # or a ProviderConfig.
+      base:
+        apiVersion: kubernetes.crossplane.io/v1alpha1
+        kind: Object
+        spec:
+          forProvider:
+            manifest:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: test-configmap
+                namespace: default
+              data:
+                color_humans_see_best: "Green"
+          providerConfigRef:
+            name: kubernetes-provider
