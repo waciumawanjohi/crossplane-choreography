@@ -9,6 +9,7 @@ metadata:
     # The following label can
     # be used in 'compositionSelector' in an XR or Claim.
     app.tanzu.vmware.com/workload-type: web
+    app.tanzu.vmware.com/starting-point: image
 spec:
 
   # Each Composition must declare that it is compatible with a particular type
@@ -33,25 +34,125 @@ spec:
     # this identifies the resources entry within the Composition - it's not
     # the name the CloudSQLInstance. The 'name' field will be required in a
     # future version of this API.
-    - name: some-configmap
-
-      # The 'base' template for the CloudSQLInstance Crossplane will create.
-      # You can use the base template to specify fields that never change, or
-      # default values for fields that may optionally be patched over. Bases must
-      # be a valid Crossplane resource - a Managed Resource, Composite Resource,
-      # or a ProviderConfig.
+    - name: image-provider
       base:
         apiVersion: kubernetes.crossplane.io/v1alpha1
         kind: Object
         spec:
           forProvider:
             manifest:
-              apiVersion: v1
-              kind: ConfigMap
+              apiVersion: source.apps.tanzu.vmware.com/v1alpha1
+              kind: ImageRepository
               metadata:
-                name: test-configmap
-                namespace: default
-              data:
-                color_humans_see_best: "Green"
+                labels:
+                  app.kubernetes.io/component: image
+              spec:
+                image: docker.io/nginxdemos/hello:latest
+                interval: 1m0s
+                serviceAccountName: default
           providerConfigRef:
             name: kubernetes-provider
+      patches:
+        - type: FromCompositeFieldPath
+          toFieldPath: spec.forProvider.manifest.metadata.name
+          fromFieldPath: spec.claimRef.name
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          toFieldPath: spec.forProvider.manifest.metadata.namespace
+          fromFieldPath: spec.claimRef.namespace
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          toFieldPath: spec.forProvider.manifest.metadata.labels
+          fromFieldPath: metadata.labels
+          policy:
+            mergeOptions:
+              appendSlice: true
+        - type: FromCompositeFieldPath
+          toFieldPath: spec.forProvider.manifest.spec.image
+          fromFieldPath: spec.source.image
+          policy:
+            fromFieldPath: Required
+         # TODO: create a field in the workload for image pull permissions.
+         #       not needed now because we're referring to a public image
+#        - type: FromCompositeFieldPath
+#          toFieldPath: spec.forProvider.manifest.spec.serviceAccountName
+#          fromFieldPath: spec.SOME_FIELD_STILL_NEEDED
+#          policy:
+#            fromFieldPath: Required
+
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.manifest.status.artifact.revision
+          toFieldPath: status.resources[0].name
+          policy:
+            fromFieldPath: Required
+#    - name: config-provider
+#      base:
+#        apiVersion: kubernetes.crossplane.io/v1alpha1
+#        kind: Object
+#        spec:
+#          providerConfigRef:
+#            name: kubernetes-provider
+#          forProvider:
+#            manifest:
+#              apiVersion: conventions.apps.tanzu.vmware.com/v1alpha1
+#              kind: PodIntent
+#              metadata:
+#                labels:
+#                  app.kubernetes.io/component: intent
+#              spec:
+#                serviceAccountName: default
+#                template:
+#                  metadata:
+#                    annotations:
+#                      developer.conventions/target-containers: workload
+#                    labels:
+#                      app.kubernetes.io/component: run
+#                  spec:
+#                    serviceAccountName: default
+#                    containers:
+#                      - name: workload
+#                        image: #@ data.values.image
+#                        securityContext:
+#                          runAsUser: 1000
+#                        #@ if hasattr(data.values.workload.spec, "env"):
+#                        env:
+#                          #@ for var in data.values.workload.spec.env:
+#                          - name: #@ var.name
+#                            #@ if/end hasattr(var, "value"):
+#                            value: #@ var.value
+#                            #@ if/end hasattr(var, "valueFrom"):
+#                            valueFrom: #@ var.valueFrom
+#                          #@ end
+#                        #@ end
+#                        #@ if/end hasattr(data.values.workload.spec, "resources"):
+#                        resources: #@ data.values.workload.spec["resources"]
+#      patches:
+#        - type: FromCompositeFieldPath
+#          toFieldPath: spec.forProvider.manifest.metadata.name
+#          fromFieldPath: spec.claimRef.name
+#          policy:
+#            fromFieldPath: Required
+#        - type: FromCompositeFieldPath
+#          toFieldPath: spec.forProvider.manifest.metadata.labels
+#          fromFieldPath: metadata.labels
+#          policy:
+#            mergeOptions:
+#              appendSlice: true
+#        - type: FromCompositeFieldPath
+#          toFieldPath: spec.forProvider.manifest.spec.template.metadata.labels.carto.run/workload-name
+#          fromFieldPath: spec.claimRef.name
+#          policy:
+#            fromFieldPath: Required
+## TODO create field on workload for debug and live-update param
+##        - type: FromCompositeFieldPath
+##          toFieldPath: spec.forProvider.manifest.spec.template.metadata.annotations.apps.tanzu.vmware.com/debug
+##          fromFieldPath: param("debug")
+##        - type: FromCompositeFieldPath
+##          toFieldPath: spec.forProvider.manifest.spec.template.metadata.annotations.apps.tanzu.vmware.com/live-update
+##          fromFieldPath: param("live-update")
+## TODO create field on workload for annotations
+#        - type: FromCompositeFieldPath
+#          toFieldPath: spec.forProvider.manifest.spec.template.metadata.annotations
+#          fromFieldPath: param("annotations")
